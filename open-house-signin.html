@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Open House Sign-In</title>
+  <style>
+    /* =============================================
+       BACKGROUND PHOTO LAYER
+    ============================================= */
+    .bg-photo {
+      position: fixed;
+      inset: 0;
+      background-size: cover;
+      background-position: center center;
+      background-repeat: no-repeat;
+      z-index: -2;
+    }
+
+    .bg-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0);   /* opacity set by JS */
+      z-index: -1;
+      transition: background 0.4s;
+    }
+
+    /* When a photo is active, lighten the header text to white */
+    body.has-photo .page-header h1,
+    body.has-photo .page-header .address,
+    body.has-photo .page-header .agent-row,
+    body.has-photo .page-header .agent-row strong {
+      color: #fff;
+      text-shadow: 0 1px 4px rgba(0,0,0,0.4);
+    }
+
+    body.has-photo .page-header .open-house-label {
+      background: rgba(255,255,255,0.2);
+      color: #fff;
+      border: 1px solid rgba(255,255,255,0.35);
+    }
+
+    body.has-photo .page-footer { color: rgba(255,255,255,0.6); }
+
+    /* =============================================
+       GLOBAL RESET & BASE
+    ============================================= */
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    :root {
+      --brand:    #1a3c5e;
+      --accent:   #c9922a;
+      --bg:       #f5f6f8;
+      --card:     #ffffff;
+      --border:   #dde2ea;
+      --text:     #1e2533;
+      --muted:    #6b7280;
+      --success:  #16a34a;
+      --error:    #dc2626;
+      --radius:   12px;
+      --shadow:   0 4px 24px rgba(0,0,0,0.08);
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      min-height: 100vh;
+      padding: 24px 16px 48px;
+    }
+
+    /* =============================================
+       PAGE HEADER
+    ============================================= */
+    .page-header {
+      width: 100%;
+      max-width: 560px;
+      text-align: center;
+      margin-bottom: 28px;
+    }
+
+    .page-header .logo-row {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      margin-bottom: 6px;
+    }
+
+    .page-header .house-icon {
+      font-size: 28px;
+    }
+
+    .page-header .open-house-label {
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      color: var(--accent);
+      background: rgba(201,146,42,0.1);
+      padding: 4px 12px;
+      border-radius: 20px;
+      margin-bottom: 10px;
+      display: inline-block;
+    }
+
+    .page-header h1 {
+      font-size: 22px;
+      font-weight: 700;
+      color: var(--brand);
+      line-height: 1.2;
+    }
+
+    .page-header .address {
+      font-size: 15px;
+      color: var(--muted);
+      margin-top: 4px;
+    }
+
+    .page-header .agent-row {
+      margin-top: 14px;
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .page-header .agent-row strong {
+      color: var(--text);
+    }
+
+    /* =============================================
+       CARD
+    ============================================= */
+    .card {
+      width: 100%;
+      max-width: 560px;
+      background: var(--card);
+      border-radius: var(--radius);
+      box-shadow: var(--shadow);
+      padding: 32px 28px;
+    }
+
+    .card h2 {
+      font-size: 17px;
+      font-weight: 700;
+      color: var(--brand);
+      margin-bottom: 6px;
+    }
+
+    .card .subtitle {
+      font-size: 13px;
+      color: var(--muted);
+      margin-bottom: 24px;
+    }
+
+    /* =============================================
+       FORM ELEMENTS
+    ============================================= */
+    .form-row {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 14px;
+      margin-bottom: 14px;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+      margin-bottom: 14px;
+    }
+
+    .form-group.no-margin { margin-bottom: 0; }
+
+    label {
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--text);
+    }
+
+    label .required { color: var(--error); margin-left: 2px; }
+
+    input[type="text"],
+    input[type="email"],
+    input[type="tel"],
+    select {
+      width: 100%;
+      padding: 11px 14px;
+      border: 1.5px solid var(--border);
+      border-radius: 8px;
+      font-size: 15px;
+      color: var(--text);
+      background: #fff;
+      transition: border-color 0.2s, box-shadow 0.2s;
+      outline: none;
+      appearance: none;
+      -webkit-appearance: none;
+    }
+
+    input::placeholder { color: #b0b8c6; }
+
+    input:focus, select:focus {
+      border-color: var(--brand);
+      box-shadow: 0 0 0 3px rgba(26,60,94,0.1);
+    }
+
+    input.error-field, select.error-field {
+      border-color: var(--error);
+      box-shadow: 0 0 0 3px rgba(220,38,38,0.08);
+    }
+
+    .select-wrapper {
+      position: relative;
+    }
+
+    .select-wrapper::after {
+      content: '▾';
+      position: absolute;
+      right: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      pointer-events: none;
+      color: var(--muted);
+      font-size: 14px;
+    }
+
+    /* =============================================
+       RADIO GROUP (pill style)
+    ============================================= */
+    .radio-group {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+    }
+
+    .radio-group input[type="radio"] {
+      display: none;
+    }
+
+    .radio-group label {
+      cursor: pointer;
+      padding: 9px 16px;
+      border: 1.5px solid var(--border);
+      border-radius: 30px;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      background: #fff;
+      transition: all 0.15s;
+      user-select: none;
+    }
+
+    .radio-group input[type="radio"]:checked + label {
+      border-color: var(--brand);
+      background: var(--brand);
+      color: #fff;
+      font-weight: 600;
+    }
+
+    /* =============================================
+       DIVIDER
+    ============================================= */
+    .section-divider {
+      border: none;
+      border-top: 1px solid var(--border);
+      margin: 24px 0;
+    }
+
+    .section-label {
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
+      text-transform: uppercase;
+      color: var(--muted);
+      margin-bottom: 16px;
+    }
+
+    /* =============================================
+       SUBMIT BUTTON
+    ============================================= */
+    .btn-submit {
+      width: 100%;
+      padding: 14px;
+      background: var(--brand);
+      color: #fff;
+      font-size: 16px;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s, transform 0.1s;
+      margin-top: 8px;
+      letter-spacing: 0.01em;
+    }
+
+    .btn-submit:hover  { background: #14304d; }
+    .btn-submit:active { transform: scale(0.99); }
+
+    .btn-submit:disabled {
+      opacity: 0.65;
+      cursor: not-allowed;
+    }
+
+    .btn-submit .spinner {
+      display: inline-block;
+      width: 16px;
+      height: 16px;
+      border: 2px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      vertical-align: middle;
+      margin-right: 8px;
+    }
+
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* =============================================
+       TOAST / ALERT
+    ============================================= */
+    .toast {
+      display: none;
+      align-items: flex-start;
+      gap: 12px;
+      padding: 16px 18px;
+      border-radius: 10px;
+      font-size: 14px;
+      margin-top: 16px;
+    }
+
+    .toast.success {
+      background: #f0fdf4;
+      border: 1px solid #bbf7d0;
+      color: var(--success);
+    }
+
+    .toast.error-toast {
+      background: #fef2f2;
+      border: 1px solid #fecaca;
+      color: var(--error);
+    }
+
+    .toast.visible { display: flex; }
+
+    .toast-icon { font-size: 20px; flex-shrink: 0; }
+
+    .toast-body strong { display: block; font-weight: 700; margin-bottom: 2px; }
+
+    /* =============================================
+       SUCCESS OVERLAY
+    ============================================= */
+    .success-overlay {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      text-align: center;
+      padding: 48px 24px;
+    }
+
+    .success-overlay.visible { display: flex; }
+
+    .success-circle {
+      width: 72px;
+      height: 72px;
+      border-radius: 50%;
+      background: #f0fdf4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 32px;
+      margin-bottom: 20px;
+      border: 2px solid #bbf7d0;
+    }
+
+    .success-overlay h2 {
+      font-size: 22px;
+      color: var(--brand);
+      margin-bottom: 8px;
+    }
+
+    .success-overlay p {
+      color: var(--muted);
+      font-size: 14px;
+      max-width: 320px;
+      line-height: 1.6;
+    }
+
+    .btn-next {
+      margin-top: 28px;
+      padding: 12px 32px;
+      background: var(--accent);
+      color: #fff;
+      font-size: 15px;
+      font-weight: 700;
+      border: none;
+      border-radius: 8px;
+      cursor: pointer;
+      transition: background 0.2s;
+    }
+
+    .btn-next:hover { background: #b07d20; }
+
+    /* =============================================
+       ADMIN BAR (guest count + CSV download)
+    ============================================= */
+    .admin-bar {
+      width: 100%;
+      max-width: 560px;
+      margin-top: 14px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 18px;
+      gap: 12px;
+    }
+
+    .guest-count {
+      font-size: 13px;
+      color: var(--muted);
+    }
+
+    .guest-count strong {
+      color: var(--brand);
+      font-size: 15px;
+    }
+
+    .btn-download {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 16px;
+      background: #fff;
+      border: 1.5px solid var(--border);
+      border-radius: 7px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--brand);
+      cursor: pointer;
+      transition: background 0.15s, border-color 0.15s;
+      white-space: nowrap;
+    }
+
+    .btn-download:hover {
+      background: #f0f4f8;
+      border-color: var(--brand);
+    }
+
+    .btn-clear {
+      font-size: 12px;
+      color: var(--muted);
+      background: none;
+      border: none;
+      cursor: pointer;
+      text-decoration: underline;
+      padding: 0;
+    }
+
+    .btn-clear:hover { color: var(--error); }
+
+    /* =============================================
+       FOOTER
+    ============================================= */
+    .page-footer {
+      margin-top: 14px;
+      font-size: 12px;
+      color: #b0b8c6;
+      text-align: center;
+    }
+
+    /* =============================================
+       RESPONSIVE
+    ============================================= */
+    @media (max-width: 480px) {
+      .form-row { grid-template-columns: 1fr; }
+      .card { padding: 24px 18px; }
+    }
+  </style>
+</head>
+<body>
+
+<!-- Background photo layers (controlled by JS) -->
+<div class="bg-photo"   id="bgPhoto"></div>
+<div class="bg-overlay" id="bgOverlay"></div>
+
+<!-- ================================================
+     ⚙️  LISTING CONFIGURATION
+     Edit the values below for each new listing.
+     Everything else is automatic!
+================================================ -->
+<script>
+  const LISTING = {
+    // --- Listing Details ---
+    address:        "12861 Foothill Ln",           // Street address
+    cityStateZip:   "Saratoga, CA 95070",        // City, State ZIP
+    price:          "$3,888,000",                // Listing price (optional, leave "" to hide)
+    openHouseDate:  "Sunday, March 29, 2026",  // Date of open house (optional, leave "" to hide)
+
+    // --- Background Photo ---
+    // Put the photo file in the SAME folder as this HTML file, then type the filename below.
+    // Example: backgroundImage: "12861-foothill.jpg"
+    // Leave the "" empty for no photo (uses a plain light gray background instead).
+    // Tip: Use a wide/landscape photo of the home's exterior or a beautiful interior shot.
+    backgroundImage: "foothill-front.jpg",                         // e.g. "house-front.jpg"
+    overlayDarkness: 0.45,                       // How dark to dim the photo: 0 = none, 1 = fully black. Default: 0.45
+
+    // --- Agent Details ---
+    agentName:      "Paul Pham",
+    agentPhone:     "(408) 824-0674",            // Optional
+
+    // --- Zapier Webhook (replaces direct FUB API call — avoids browser security restrictions) ---
+    // Paste your Zapier "Catch Hook" webhook URL below.
+    // In Zapier: New Zap → Trigger: Webhooks > Catch Hook → Action: Follow Up Boss > Create/Update Contact
+    zapierWebhook: "https://hooks.zapier.com/hooks/catch/27010242/un9013u/",
+
+    // --- Follow Up Boss (for reference / Zapier setup) ---
+    fubSource:      "Open House",                // Source label to use in your Zapier → FUB action
+  };
+
+  // Auto-generates the tag from the address above
+  // e.g. "Open House - 123 Main Street, Saratoga, CA 95070"
+  LISTING.tag = `Open House - ${LISTING.address}, ${LISTING.cityStateZip}`;
+</script>
+
+<!-- ================================================
+     PAGE HEADER
+================================================ -->
+<header class="page-header" id="pageHeader">
+  <!-- Populated by JS -->
+</header>
+
+<!-- ================================================
+     SIGN-IN CARD
+================================================ -->
+<div class="card">
+
+  <!-- Form View -->
+  <div id="formView">
+    <h2>Guest Sign-In</h2>
+    <p class="subtitle">Welcome! Please take a moment to sign in below.</p>
+
+    <form id="signinForm" novalidate>
+
+      <!-- Name Row -->
+      <div class="form-row">
+        <div class="form-group no-margin">
+          <label for="firstName">First Name <span class="required">*</span></label>
+          <input type="text" id="firstName" name="firstName" placeholder="Jane" autocomplete="given-name" />
+        </div>
+        <div class="form-group no-margin">
+          <label for="lastName">Last Name <span class="required">*</span></label>
+          <input type="text" id="lastName" name="lastName" placeholder="Smith" autocomplete="family-name" />
+        </div>
+      </div>
+
+      <!-- Email -->
+      <div class="form-group">
+        <label for="email">Email Address <span class="required">*</span></label>
+        <input type="email" id="email" name="email" placeholder="jane@email.com" autocomplete="email" />
+      </div>
+
+      <!-- Phone -->
+      <div class="form-group">
+        <label for="phone">Phone Number <span class="required">*</span></label>
+        <input type="tel" id="phone" name="phone" placeholder="(555) 000-0000" autocomplete="tel" />
+      </div>
+
+      <hr class="section-divider" />
+      <p class="section-label">A couple quick questions</p>
+
+      <!-- Working with Agent -->
+      <div class="form-group">
+        <label>Are you currently working with a real estate agent?</label>
+        <div class="radio-group" id="agentGroup">
+          <input type="radio" name="withAgent" id="agentYes" value="Yes" />
+          <label for="agentYes">Yes</label>
+
+          <input type="radio" name="withAgent" id="agentNo" value="No" />
+          <label for="agentNo">No</label>
+
+          <input type="radio" name="withAgent" id="agentJustLooking" value="Just Looking" />
+          <label for="agentJustLooking">Just Looking</label>
+        </div>
+      </div>
+
+      <!-- Pre-Approval -->
+      <div class="form-group">
+        <label>Are you pre-approved for a mortgage?</label>
+        <div class="radio-group" id="preapprovedGroup">
+          <input type="radio" name="preApproved" id="preYes"  value="Yes — Pre-Approved" />
+          <label for="preYes">Yes</label>
+
+          <input type="radio" name="preApproved" id="preCash" value="Paying Cash" />
+          <label for="preCash">Paying Cash</label>
+
+          <input type="radio" name="preApproved" id="preNo"   value="Not Yet" />
+          <label for="preNo">Not Yet</label>
+
+          <input type="radio" name="preApproved" id="preLooking" value="Just Browsing" />
+          <label for="preLooking">Just Browsing</label>
+        </div>
+      </div>
+
+      <!-- Submit -->
+      <button type="submit" class="btn-submit" id="submitBtn">
+        Sign In
+      </button>
+
+      <!-- Error Toast -->
+      <div class="toast error-toast" id="errorToast">
+        <span class="toast-icon">⚠️</span>
+        <div class="toast-body">
+          <strong>Something went wrong</strong>
+          <span id="errorMsg">Please check your information and try again.</span>
+        </div>
+      </div>
+
+    </form>
+  </div>
+
+  <!-- Success View -->
+  <div class="success-overlay" id="successView">
+    <div class="success-circle">✓</div>
+    <h2>You're signed in!</h2>
+    <p>Thank you for visiting. We hope you love the home. <br />We'll follow up with you shortly.</p>
+    <button class="btn-next" id="nextGuestBtn">Next Guest →</button>
+  </div>
+
+</div>
+
+<!-- Admin Bar -->
+<div class="admin-bar">
+  <div class="guest-count">
+    <strong id="guestCountNum">0</strong> guest<span id="guestCountPlural">s</span> signed in
+    <br><button class="btn-clear" id="clearBtn" onclick="clearSignIns()">Clear list</button>
+  </div>
+  <button class="btn-download" onclick="downloadCSV()">
+    ⬇ Download Sign-In Sheet
+  </button>
+</div>
+
+<footer class="page-footer" id="pageFooter">
+  <!-- Populated by JS -->
+</footer>
+
+<!-- ================================================
+     JAVASCRIPT
+================================================ -->
+<script>
+/* ---- Populate header from LISTING config ---- */
+(function buildHeader() {
+  const h = document.getElementById('pageHeader');
+  let html = `<div class="logo-row"><span class="house-icon">🏡</span></div>`;
+  html += `<span class="open-house-label">Open House</span>`;
+
+  const pricePart = LISTING.price ? ` &nbsp;·&nbsp; ${LISTING.price}` : '';
+  html += `<h1>${LISTING.address}</h1>`;
+  html += `<div class="address">${LISTING.cityStateZip}${pricePart}</div>`;
+
+  if (LISTING.openHouseDate) {
+    html += `<div class="address" style="margin-top:3px;font-size:13px;">${LISTING.openHouseDate}</div>`;
+  }
+
+  html += `<div class="agent-row">Hosted by <strong>${LISTING.agentName}</strong>`;
+  if (LISTING.agentPhone) html += ` &nbsp;·&nbsp; ${LISTING.agentPhone}`;
+  html += `</div>`;
+
+  h.innerHTML = html;
+
+  document.getElementById('pageFooter').textContent =
+    `Powered by Follow Up Boss  ·  ${LISTING.tag}`;
+})();
+
+/* ---- Apply background photo ---- */
+(function applyBackground() {
+  if (!LISTING.backgroundImage) return;
+  const photo   = document.getElementById('bgPhoto');
+  const overlay = document.getElementById('bgOverlay');
+  photo.style.backgroundImage = `url("${LISTING.backgroundImage}")`;
+  overlay.style.background    = `rgba(0,0,0,${LISTING.overlayDarkness ?? 0.45})`;
+  document.body.classList.add('has-photo');
+  // Remove the gray background so the photo layer shows through
+  document.documentElement.style.background = 'transparent';
+  document.body.style.background = 'transparent';
+})();
+
+/* ---- Phone auto-formatting ---- */
+document.getElementById('phone').addEventListener('input', function () {
+  let val = this.value.replace(/\D/g, '');
+  if (val.length > 10) val = val.slice(0, 10);
+  if (val.length >= 7)      val = `(${val.slice(0,3)}) ${val.slice(3,6)}-${val.slice(6)}`;
+  else if (val.length >= 4) val = `(${val.slice(0,3)}) ${val.slice(3)}`;
+  else if (val.length >= 1) val = `(${val}`;
+  this.value = val;
+});
+
+/* ---- Validation helpers ---- */
+function isValidEmail(v) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v.trim());
+}
+
+function markField(id, valid) {
+  const el = document.getElementById(id);
+  el.classList.toggle('error-field', !valid);
+  return valid;
+}
+
+/* ---- Radio helper ---- */
+function getRadioValue(name) {
+  const checked = document.querySelector(`input[name="${name}"]:checked`);
+  return checked ? checked.value : 'Not specified';
+}
+
+/* ---- Send to Zapier Webhook → Follow Up Boss ---- */
+async function sendToFUB(data) {
+  const webhookUrl = LISTING.zapierWebhook;
+
+  // Demo mode — no webhook configured yet
+  if (!webhookUrl || webhookUrl === 'YOUR_ZAPIER_WEBHOOK_URL_HERE') {
+    console.log('[Demo Mode] Would send to Zapier → FUB:', data);
+    await new Promise(r => setTimeout(r, 800));
+    return { ok: true, demo: true };
+  }
+
+  // Build the payload Zapier will receive and forward to Follow Up Boss
+  const payload = {
+    firstName:   data.firstName,
+    lastName:    data.lastName,
+    email:       data.email,
+    phone:       data.phone,
+    tag:         LISTING.tag,
+    source:      LISTING.fubSource,
+    listing:     `${LISTING.address}, ${LISTING.cityStateZip}`,
+    openHouseDate: LISTING.openHouseDate || '',
+    withAgent:   data.withAgent,
+    preApproved: data.preApproved,
+    notes:       [
+      `Open House: ${LISTING.address}, ${LISTING.cityStateZip}`,
+      `Date: ${LISTING.openHouseDate || 'Not specified'}`,
+      `Working with agent: ${data.withAgent}`,
+      `Pre-approved: ${data.preApproved}`,
+    ].join('\n'),
+  };
+
+  // Zapier webhooks accept POST with JSON and allow browser requests (no CORS issue)
+  const resp = await fetch(webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  });
+
+  if (!resp.ok) {
+    throw new Error(`Zapier returned HTTP ${resp.status}. Check your webhook URL.`);
+  }
+
+  return { ok: true };
+}
+
+/* ---- Form submission ---- */
+document.getElementById('signinForm').addEventListener('submit', async function (e) {
+  e.preventDefault();
+
+  // --- Gather values ---
+  const firstName = document.getElementById('firstName').value.trim();
+  const lastName  = document.getElementById('lastName').value.trim();
+  const email     = document.getElementById('email').value.trim();
+  const phone     = document.getElementById('phone').value.trim();
+
+  // --- Validate ---
+  let valid = true;
+  valid = markField('firstName', firstName.length > 0) && valid;
+  valid = markField('lastName',  lastName.length > 0)  && valid;
+  valid = markField('email',     isValidEmail(email))   && valid;
+  valid = markField('phone',     phone.replace(/\D/g,'').length >= 10) && valid;
+
+  if (!valid) {
+    showError('Please fill in all required fields correctly.');
+    return;
+  }
+
+  hideError();
+
+  // --- Submit ---
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = true;
+  btn.innerHTML = '<span class="spinner"></span>Submitting…';
+
+  const payload = {
+    firstName,
+    lastName,
+    email,
+    phone,
+    withAgent:   getRadioValue('withAgent'),
+    preApproved: getRadioValue('preApproved'),
+  };
+
+  try {
+    // Always save locally first — this never fails
+    saveSignIn(payload);
+
+    // Then attempt to send to Zapier → Follow Up Boss
+    const result = await sendToFUB(payload);
+    showSuccess();
+  } catch (err) {
+    console.error(err);
+    // Local save already succeeded — let the guest through and flag the FUB issue
+    showSuccess();
+    console.warn('Saved locally but FUB sync failed:', err.message);
+  }
+});
+
+/* ---- Show/hide states ---- */
+function showSuccess() {
+  document.getElementById('formView').style.display    = 'none';
+  document.getElementById('successView').classList.add('visible');
+}
+
+function resetForm() {
+  document.getElementById('signinForm').reset();
+  document.querySelectorAll('.error-field').forEach(el => el.classList.remove('error-field'));
+  hideError();
+
+  const btn = document.getElementById('submitBtn');
+  btn.disabled = false;
+  btn.innerHTML = 'Sign In';
+
+  document.getElementById('successView').classList.remove('visible');
+  document.getElementById('formView').style.display = '';
+  document.getElementById('firstName').focus();
+}
+
+function showError(msg) {
+  document.getElementById('errorMsg').textContent = msg;
+  document.getElementById('errorToast').classList.add('visible');
+}
+
+function hideError() {
+  document.getElementById('errorToast').classList.remove('visible');
+}
+
+/* ---- Next guest button ---- */
+document.getElementById('nextGuestBtn').addEventListener('click', resetForm);
+
+/* ---- Clear error styling on input ---- */
+['firstName','lastName','email','phone'].forEach(id => {
+  document.getElementById(id).addEventListener('input', function () {
+    this.classList.remove('error-field');
+    hideError();
+  });
+});
+
+/* ================================================
+   LOCAL STORAGE — Save sign-ins as backup
+================================================ */
+function storageKey() {
+  // Each listing gets its own storage bucket
+  return 'oh_signins__' + LISTING.tag;
+}
+
+function loadSignIns() {
+  try {
+    return JSON.parse(localStorage.getItem(storageKey()) || '[]');
+  } catch (e) { return []; }
+}
+
+function saveSignIn(payload) {
+  const entries = loadSignIns();
+  entries.push({
+    timestamp:   new Date().toLocaleString(),
+    firstName:   payload.firstName,
+    lastName:    payload.lastName,
+    email:       payload.email,
+    phone:       payload.phone,
+    withAgent:   payload.withAgent,
+    preApproved: payload.preApproved,
+    listing:     LISTING.tag,
+  });
+  localStorage.setItem(storageKey(), JSON.stringify(entries));
+  updateGuestCount();
+}
+
+function updateGuestCount() {
+  const n = loadSignIns().length;
+  document.getElementById('guestCountNum').textContent    = n;
+  document.getElementById('guestCountPlural').textContent = n === 1 ? '' : 's';
+}
+
+function clearSignIns() {
+  if (!confirm('Clear all locally saved sign-ins for this listing? This cannot be undone.')) return;
+  localStorage.removeItem(storageKey());
+  updateGuestCount();
+}
+
+/* ---- CSV Download ---- */
+function downloadCSV() {
+  const entries = loadSignIns();
+  if (entries.length === 0) {
+    alert('No sign-ins recorded yet for this listing.');
+    return;
+  }
+
+  const headers = ['Timestamp','First Name','Last Name','Email','Phone','Working with Agent?','Pre-Approved?','Listing'];
+  const rows = entries.map(e => [
+    e.timestamp, e.firstName, e.lastName, e.email,
+    e.phone, e.withAgent, e.preApproved, e.listing,
+  ]);
+
+  const csvContent = [headers, ...rows]
+    .map(row => row.map(cell => `"${String(cell || '').replace(/"/g, '""')}"`).join(','))
+    .join('\n');
+
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const url  = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+
+  // File name includes listing address + date
+  const dateStr = new Date().toISOString().slice(0,10);
+  link.href     = url;
+  link.download = `Open House Sign-Ins - ${LISTING.address} - ${dateStr}.csv`;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+// Initialize count on page load
+updateGuestCount();
+</script>
+</body>
+</html>
