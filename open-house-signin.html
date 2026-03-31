@@ -754,7 +754,7 @@ async function sendToFUB(data) {
   // Zapier webhooks accept POST with JSON and allow browser requests (no CORS issue)
   const resp = await fetch(webhookUrl, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    mode: 'no-cors',
     body: JSON.stringify(payload),
   });
 
