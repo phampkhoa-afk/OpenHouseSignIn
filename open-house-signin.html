@@ -6,26 +6,33 @@
   <title>Open House Sign-In</title>
   <style>
     /* =============================================
-       BACKGROUND PHOTO LAYER
+       BACKGROUND PHOTO — applied directly to body
+       (most reliable method for local file:// use)
     ============================================= */
-    .bg-photo {
-      position: fixed;
-      inset: 0;
+
+    /* body gets the image; ::before pseudo-element is the dark overlay */
+    body.has-photo {
       background-size: cover;
       background-position: center center;
       background-repeat: no-repeat;
-      z-index: -2;
+      background-attachment: fixed;
     }
 
-    .bg-overlay {
+    body.has-photo::before {
+      content: '';
       position: fixed;
       inset: 0;
-      background: rgba(0, 0, 0, 0);   /* opacity set by JS */
-      z-index: -1;
-      transition: background 0.4s;
+      background: rgba(0, 0, 0, var(--overlay-darkness, 0.45));
+      z-index: 0;
     }
 
-    /* When a photo is active, lighten the header text to white */
+    /* Lift all direct body children above the overlay */
+    body.has-photo > * {
+      position: relative;
+      z-index: 1;
+    }
+
+    /* When a photo is active, header text turns white */
     body.has-photo .page-header h1,
     body.has-photo .page-header .address,
     body.has-photo .page-header .agent-row,
@@ -467,6 +474,55 @@
 
     .btn-clear:hover { color: var(--error); }
 
+    .sync-status {
+      display: none;
+      align-items: center;
+      gap: 6px;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 5px 10px;
+      border-radius: 20px;
+      white-space: nowrap;
+    }
+
+    .sync-status.pending {
+      display: flex;
+      background: #fff7ed;
+      color: #c2410c;
+      border: 1px solid #fed7aa;
+    }
+
+    .sync-status.syncing {
+      display: flex;
+      background: #eff6ff;
+      color: #1d4ed8;
+      border: 1px solid #bfdbfe;
+    }
+
+    .sync-status.synced {
+      display: flex;
+      background: #f0fdf4;
+      color: #15803d;
+      border: 1px solid #bbf7d0;
+    }
+
+    .sync-dot {
+      width: 7px;
+      height: 7px;
+      border-radius: 50%;
+      background: currentColor;
+      flex-shrink: 0;
+    }
+
+    .sync-status.syncing .sync-dot {
+      animation: pulse 1s ease-in-out infinite;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: 0.3; }
+    }
+
     /* =============================================
        FOOTER
     ============================================= */
@@ -487,10 +543,6 @@
   </style>
 </head>
 <body>
-
-<!-- Background photo layers (controlled by JS) -->
-<div class="bg-photo"   id="bgPhoto"></div>
-<div class="bg-overlay" id="bgOverlay"></div>
 
 <!-- ================================================
      ⚙️  LISTING CONFIGURATION
@@ -643,9 +695,15 @@
     <strong id="guestCountNum">0</strong> guest<span id="guestCountPlural">s</span> signed in
     <br><button class="btn-clear" id="clearBtn" onclick="clearSignIns()">Clear list</button>
   </div>
-  <button class="btn-download" onclick="downloadCSV()">
-    ⬇ Download Sign-In Sheet
-  </button>
+  <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;">
+    <span class="sync-status" id="syncBadge">
+      <span class="sync-dot"></span>
+      <span id="syncLabel"></span>
+    </span>
+    <button class="btn-download" onclick="downloadCSV()">
+      ⬇ Download Sign-In Sheet
+    </button>
+  </div>
 </div>
 
 <footer class="page-footer" id="pageFooter">
@@ -683,14 +741,11 @@
 /* ---- Apply background photo ---- */
 (function applyBackground() {
   if (!LISTING.backgroundImage) return;
-  const photo   = document.getElementById('bgPhoto');
-  const overlay = document.getElementById('bgOverlay');
-  photo.style.backgroundImage = `url("${LISTING.backgroundImage}")`;
-  overlay.style.background    = `rgba(0,0,0,${LISTING.overlayDarkness ?? 0.45})`;
+  // Set the CSS variable for overlay darkness
+  document.documentElement.style.setProperty('--overlay-darkness', LISTING.overlayDarkness ?? 0.45);
+  // Apply the image directly to body — works reliably with local file:// URLs
+  document.body.style.backgroundImage = `url("${LISTING.backgroundImage}")`;
   document.body.classList.add('has-photo');
-  // Remove the gray background so the photo layer shows through
-  document.documentElement.style.background = 'transparent';
-  document.body.style.background = 'transparent';
 })();
 
 /* ---- Phone auto-formatting ---- */
@@ -808,13 +863,13 @@ document.getElementById('signinForm').addEventListener('submit', async function 
     saveSignIn(payload);
 
     // Then attempt to send to Zapier → Follow Up Boss
-    const result = await sendToFUB(payload);
+    await sendToFUB(payload);
     showSuccess();
   } catch (err) {
-    console.error(err);
-    // Local save already succeeded — let the guest through and flag the FUB issue
+    // Local save already succeeded — queue the payload for retry when back online
+    addToQueue(payload);
     showSuccess();
-    console.warn('Saved locally but FUB sync failed:', err.message);
+    console.warn('Offline or send failed — queued for retry:', err.message);
   }
 });
 
@@ -932,6 +987,108 @@ function downloadCSV() {
 
 // Initialize count on page load
 updateGuestCount();
+
+/* ================================================
+   OFFLINE QUEUE — retry Zapier when back online
+================================================ */
+function queueKey() {
+  return 'oh_queue__' + LISTING.tag;
+}
+
+function loadQueue() {
+  try { return JSON.parse(localStorage.getItem(queueKey()) || '[]'); }
+  catch (e) { return []; }
+}
+
+function addToQueue(payload) {
+  const queue = loadQueue();
+  queue.push({
+    queuedAt: new Date().toISOString(),
+    payload,
+  });
+  localStorage.setItem(queueKey(), JSON.stringify(queue));
+  updateSyncBadge();
+}
+
+function clearQueue() {
+  localStorage.removeItem(queueKey());
+  updateSyncBadge();
+}
+
+/* ---- Sync badge ---- */
+function updateSyncBadge() {
+  const badge = document.getElementById('syncBadge');
+  const label = document.getElementById('syncLabel');
+  const n = loadQueue().length;
+
+  badge.className = 'sync-status';
+
+  if (n > 0) {
+    badge.classList.add('pending');
+    label.textContent = `${n} pending sync`;
+  } else {
+    badge.style.display = 'none';
+  }
+}
+
+function showSyncing(n) {
+  const badge = document.getElementById('syncBadge');
+  const label = document.getElementById('syncLabel');
+  badge.className = 'sync-status syncing';
+  label.textContent = `Syncing ${n}…`;
+}
+
+function showSynced(n) {
+  const badge = document.getElementById('syncBadge');
+  const label = document.getElementById('syncLabel');
+  badge.className = 'sync-status synced';
+  label.textContent = `✓ ${n} synced to FUB`;
+  // Auto-hide after 4 seconds
+  setTimeout(() => { badge.style.display = 'none'; }, 4000);
+}
+
+/* ---- Process the queue ---- */
+async function processQueue() {
+  const queue = loadQueue();
+  if (queue.length === 0) return;
+  if (!navigator.onLine) return;
+
+  const webhookUrl = LISTING.zapierWebhook;
+  if (!webhookUrl || webhookUrl === 'YOUR_ZAPIER_WEBHOOK_URL_HERE') return;
+
+  showSyncing(queue.length);
+
+  let successCount = 0;
+  const remaining  = [];
+
+  for (const item of queue) {
+    try {
+      await sendToFUB(item.payload);
+      successCount++;
+    } catch (err) {
+      // Still offline or failed — keep in queue
+      remaining.push(item);
+    }
+  }
+
+  localStorage.setItem(queueKey(), JSON.stringify(remaining));
+
+  if (successCount > 0 && remaining.length === 0) {
+    showSynced(successCount);
+  } else {
+    updateSyncBadge();
+  }
+}
+
+/* ---- Auto-retry when internet comes back ---- */
+window.addEventListener('online', () => {
+  console.log('[Queue] Internet restored — processing queue...');
+  processQueue();
+});
+
+// Also try on page load in case items were queued in a previous session
+processQueue();
+updateSyncBadge();
 </script>
 </body>
 </html>
